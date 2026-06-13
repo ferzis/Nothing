@@ -1,0 +1,22 @@
+#!/bin/sh
+
+echo "[HALIUM] boot started"
+
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev
+
+ROOTFS="/data/rootfs.img"
+
+if [ -f "$ROOTFS" ]; then
+    echo "[HALIUM] mounting rootfs"
+
+    losetup /dev/loop0 $ROOTFS
+    mkdir -p /newroot
+    mount /dev/loop0 /newroot
+
+    exec switch_root /newroot /sbin/init
+fi
+
+echo "[HALIUM] fallback shell"
+exec /bin/sh
