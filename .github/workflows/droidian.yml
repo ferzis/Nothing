@@ -8,8 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    
-     - name: Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       # =========================
@@ -21,12 +20,22 @@ jobs:
           sudo apt install -y git wget curl python3 cpio gzip file util-linux
 
       # =========================
+      # DEBUG
+      # =========================
+      - name: Debug files
+        run: |
+          pwd
+          find . -type f | sort
+
+      # =========================
       # KERNEL
       # =========================
       - name: Download kernel
         run: |
           mkdir -p work
-          curl -L https://github.com/ferzis/M31-halium/releases/latest/download/Image -o work/Image
+          curl -L \
+            https://github.com/ferzis/M31-halium/releases/latest/download/Image \
+            -o work/Image
 
       # =========================
       # MKBOOTIMG
@@ -37,13 +46,12 @@ jobs:
           chmod +x mkbootimg/mkbootimg.py
 
       # =========================
-      # RAMDISK (NO HEREDOC)
+      # RAMDISK
       # =========================
-      - name: Build ramdisk (file-based)
+      - name: Build ramdisk
         run: |
           mkdir -p ramdisk/root
 
-          # просто копируем готовый файл из репо
           cp ramdisk/init ramdisk/root/init
           chmod +x ramdisk/root/init
 
