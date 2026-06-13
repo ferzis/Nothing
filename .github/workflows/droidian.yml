@@ -9,37 +9,22 @@ jobs:
 
     steps:
 
-      # =========================
-      # DEPENDENCIES
-      # =========================
       - name: Install tools
         run: |
           sudo apt update
-          sudo apt install -y \
-            git wget curl python3 cpio gzip util-linux file
+          sudo apt install -y git wget curl python3 cpio gzip util-linux file
 
-      # =========================
-      # KERNEL
-      # =========================
       - name: Download kernel
         run: |
           mkdir -p work
-          curl -L \
-            https://github.com/ferzis/M31-halium/releases/latest/download/Image \
-            -o work/Image
+          curl -L https://github.com/ferzis/M31-halium/releases/latest/download/Image -o work/Image
 
-      # =========================
-      # MKBOOTIMG
-      # =========================
       - name: Get mkbootimg
         run: |
           git clone https://android.googlesource.com/platform/system/tools/mkbootimg
           chmod +x mkbootimg/mkbootimg.py
 
-      # =========================
-      # REAL HALIUM INITRAMFS
-      # =========================
-      - name: Build Halium initramfs (REAL Droidian chain)
+      - name: Build Halium initramfs
         run: |
           mkdir -p ramdisk/root
 
@@ -52,23 +37,20 @@ mount -t proc proc /proc
 mount -t sysfs sys /sys
 mount -t devtmpfs dev /dev
 
-echo "[HALIUM] looking for Droidian rootfs"
-
-# Droidian standard location
 ROOTFS="/data/rootfs.img"
 
 if [ -f "$ROOTFS" ]; then
-    echo "[HALIUM] mounting rootfs.img"
+    echo "[HALIUM] mounting rootfs"
 
     losetup /dev/loop0 $ROOTFS
     mkdir -p /newroot
     mount /dev/loop0 /newroot
 
-    echo "[HALIUM] switching to Droidian system"
+    echo "[HALIUM] switch_root"
     exec switch_root /newroot /sbin/init
 fi
 
-echo "[HALIUM] no rootfs found, fallback shell"
+echo "[HALIUM] fallback shell"
 exec /bin/sh
 EOF
 
@@ -77,9 +59,6 @@ EOF
           cd ramdisk/root
           find . | cpio -o -H newc | gzip > ../../ramdisk.img
 
-      # =========================
-      # BOOT IMAGE
-      # =========================
       - name: Build boot.img
         run: |
           mkdir -p out
@@ -95,18 +74,12 @@ EOF
             --cmdline "init=/init androidboot.hardware=exynos9611 androidboot.selinux=permissive" \
             -o out/boot.img
 
-      # =========================
-      # VERIFY
-      # =========================
       - name: Check output
         run: |
-          file out/boot.img
           ls -lah out
+          file out/boot.img
 
-      # =========================
-      # ARTIFACT
-      # =========================
-      - name: Upload boot.img
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: m31-droidian-boot
