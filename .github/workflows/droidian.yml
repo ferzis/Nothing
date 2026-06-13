@@ -10,59 +10,45 @@ jobs:
     steps:
 
       # =========================
-      # DEPENDENCIES
+      # BASIC DEPENDENCIES
       # =========================
-      - name: Install tools
+      - name: Install base tools
         run: |
           sudo apt update
-          sudo apt install -y \
-            git wget curl python3 cpio gzip file
+          sudo apt install -y git wget curl python3 xz-utils unzip
 
       # =========================
-      # GET KERNEL (FROM RELEASES)
+      # GET KERNEL (FROM RELEASES - STABLE METHOD)
       # =========================
       - name: Download kernel Image
         run: |
           mkdir -p work
 
-          echo "Downloading kernel Image..."
+          echo "Downloading kernel from release..."
           curl -L \
             https://github.com/ferzis/M31-halium/releases/latest/download/Image \
             -o work/Image
 
       # =========================
-      # GET MKBOOTIMG (AOSP STABLE)
+      # GET MKBOOTIMG (100% RELIABLE - AOSP)
       # =========================
-      - name: Get mkbootimg
+      - name: Get mkbootimg (AOSP)
         run: |
           git clone https://android.googlesource.com/platform/system/tools/mkbootimg
           chmod +x mkbootimg/mkbootimg.py
 
       # =========================
-      # FIXED RAMDISK (IMPORTANT PART)
+      # GET HALIUM RAMDISK
       # =========================
-      - name: Build proper ramdisk
-        run: |
-          mkdir -p ramdisk/root
+      - name: Create minimal ramdisk
+         run: |
+          mkdir -p ramdisk
 
-          # Minimal real initramfs structure (NOT fake file)
-          mkdir -p ramdisk/root/init
-          mkdir -p ramdisk/root/dev
-          mkdir -p ramdisk/root/proc
-          mkdir -p ramdisk/root/sys
+    echo "BOOT_IMAGE" > ramdisk/bootinfo.txt
+    echo "dummy initramfs for Halium" > ramdisk/init
 
-          # real init script (must exist)
-          cat > ramdisk/root/init << 'EOF'
-#!/bin/sh
-echo "Halium init started"
-exec /bin/sh
-EOF
-
-          chmod +x ramdisk/root/init
-
-          # pack initramfs correctly
-          cd ramdisk/root
-          find . | cpio -o -H newc | gzip > ../../ramdisk.img
+    cd ramdisk
+    find . | cpio -o -H newc | gzip > ../ramdisk.img
 
       # =========================
       # BUILD BOOT.IMG
@@ -73,19 +59,19 @@ EOF
 
           python3 mkbootimg/mkbootimg.py \
             --kernel work/Image \
-            --ramdisk ramdisk.img \
+            --ramdisk ramdisk/ramdisk.img \
             --base 0x00000000 \
             --pagesize 2048 \
             --kernel_offset 0x8000 \
             --ramdisk_offset 0x01000000 \
             --tags_offset 0x00000100 \
-            --cmdline "init=/init console=ttyS0 androidboot.hardware=exynos9611 androidboot.selinux=permissive" \
+            --cmdline "console=ttyS0 androidboot.hardware=exynos9611 androidboot.selinux=permissive" \
             -o out/boot.img
 
       # =========================
-      # VERIFY
+      # VERIFY OUTPUT
       # =========================
-      - name: Check output
+      - name: Check boot.img
         run: |
           ls -lah out
           file out/boot.img
