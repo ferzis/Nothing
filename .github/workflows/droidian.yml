@@ -1,4 +1,4 @@
-name: Droidian Full Boot Pipeline (M31)
+name: Stable Droidian Boot.img Builder (M31)
 
 on:
   workflow_dispatch:
@@ -8,67 +8,73 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # =========================
-      # DEPENDENCIES
-      # =========================
-      - name: Install tools
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            git wget curl unzip xz-utils \
-            android-sdk-libsparse-utils gh
 
       # =========================
-      # DOWNLOAD KERNEL FROM RELEASES
+      # BASIC DEPENDENCIES
       # =========================
-      - name: Get kernel Image
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install base tools
+        run: |
+          sudo apt update
+          sudo apt install -y git wget curl python3 xz-utils unzip
+
+      # =========================
+      # GET KERNEL (FROM RELEASES - STABLE METHOD)
+      # =========================
+      - name: Download kernel Image
         run: |
           mkdir -p work
 
-          echo "Downloading kernel from releases..."
-          gh release download -R ferzis/M31-halium -p "Image" -O work/Image
+          echo "Downloading kernel from release..."
+          curl -L \
+            https://github.com/ferzis/M31-halium/releases/latest/download/Image \
+            -o work/Image
 
       # =========================
-      # RAMDISK (DROIDIAN / HALIUM)
+      # GET MKBOOTIMG (100% RELIABLE - AOSP)
       # =========================
-      - name: Get Halium ramdisk
+      - name: Get mkbootimg (AOSP)
         run: |
-          git clone https://github.com/Halium/initramfs-tools-halium.git ramdisk
+          git clone https://android.googlesource.com/platform/system/tools/mkbootimg
+          chmod +x mkbootimg/mkbootimg.py
+
+      # =========================
+      # GET HALIUM RAMDISK
+      # =========================
+      - name: Get ramdisk
+        run: |
+          git clone https://github.com/Halium/initramfs-tools-halium ramdisk
 
       # =========================
       # BUILD BOOT.IMG
       # =========================
       - name: Build boot.img
         run: |
-          mkbootimg \
+          mkdir -p out
+
+          python3 mkbootimg/mkbootimg.py \
             --kernel work/Image \
-            --ramdisk ramdisk.img \
+            --ramdisk ramdisk/ramdisk.img \
             --base 0x00000000 \
             --pagesize 2048 \
             --kernel_offset 0x8000 \
             --ramdisk_offset 0x01000000 \
             --tags_offset 0x00000100 \
             --cmdline "console=ttyS0 androidboot.hardware=exynos9611 androidboot.selinux=permissive" \
-            -o boot.img
+            -o out/boot.img
 
       # =========================
-      # UPLOAD ARTIFACT
+      # VERIFY OUTPUT
       # =========================
-      - name: Upload boot.img artifact
+      - name: Check boot.img
+        run: |
+          ls -lah out
+          file out/boot.img
+
+      # =========================
+      # UPLOAD RESULT
+      # =========================
+      - name: Upload boot.img
         uses: actions/upload-artifact@v4
         with:
           name: droidian-boot-m31
-          path: boot.img
-
-      # =========================
-      # CREATE RELEASE
-      # =========================
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: boot.img
-          tag_name: droidian-m31-${{ github.run_number }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: out/boot.img
