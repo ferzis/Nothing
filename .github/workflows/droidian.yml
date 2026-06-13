@@ -1,4 +1,4 @@
-name: Stable Droidian Boot.img Builder (M31)
+name: Droidian M31 Full Boot Chain (Halium)
 
 on:
   workflow_dispatch:
@@ -10,48 +10,75 @@ jobs:
     steps:
 
       # =========================
-      # BASIC DEPENDENCIES
+      # DEPENDENCIES
       # =========================
-      - name: Install base tools
+      - name: Install tools
         run: |
           sudo apt update
-          sudo apt install -y git wget curl python3 xz-utils unzip
+          sudo apt install -y \
+            git wget curl python3 cpio gzip util-linux file
 
       # =========================
-      # GET KERNEL (FROM RELEASES - STABLE METHOD)
+      # KERNEL
       # =========================
-      - name: Download kernel Image
+      - name: Download kernel
         run: |
           mkdir -p work
-
-          echo "Downloading kernel from release..."
           curl -L \
             https://github.com/ferzis/M31-halium/releases/latest/download/Image \
             -o work/Image
 
       # =========================
-      # GET MKBOOTIMG (100% RELIABLE - AOSP)
+      # MKBOOTIMG
       # =========================
-      - name: Get mkbootimg (AOSP)
+      - name: Get mkbootimg
         run: |
           git clone https://android.googlesource.com/platform/system/tools/mkbootimg
           chmod +x mkbootimg/mkbootimg.py
 
       # =========================
-      # GET HALIUM RAMDISK
+      # REAL HALIUM INITRAMFS
       # =========================
-      - name: Create minimal ramdisk
-         run: |
-          mkdir -p ramdisk
+      - name: Build Halium initramfs (REAL Droidian chain)
+        run: |
+          mkdir -p ramdisk/root
 
-    echo "BOOT_IMAGE" > ramdisk/bootinfo.txt
-    echo "dummy initramfs for Halium" > ramdisk/init
+          cat > ramdisk/root/init << 'EOF'
+#!/bin/sh
 
-    cd ramdisk
-    find . | cpio -o -H newc | gzip > ../ramdisk.img
+echo "[HALIUM] boot started"
+
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev
+
+echo "[HALIUM] looking for Droidian rootfs"
+
+# Droidian standard location
+ROOTFS="/data/rootfs.img"
+
+if [ -f "$ROOTFS" ]; then
+    echo "[HALIUM] mounting rootfs.img"
+
+    losetup /dev/loop0 $ROOTFS
+    mkdir -p /newroot
+    mount /dev/loop0 /newroot
+
+    echo "[HALIUM] switching to Droidian system"
+    exec switch_root /newroot /sbin/init
+fi
+
+echo "[HALIUM] no rootfs found, fallback shell"
+exec /bin/sh
+EOF
+
+          chmod +x ramdisk/root/init
+
+          cd ramdisk/root
+          find . | cpio -o -H newc | gzip > ../../ramdisk.img
 
       # =========================
-      # BUILD BOOT.IMG
+      # BOOT IMAGE
       # =========================
       - name: Build boot.img
         run: |
@@ -59,28 +86,28 @@ jobs:
 
           python3 mkbootimg/mkbootimg.py \
             --kernel work/Image \
-            --ramdisk ramdisk/ramdisk.img \
+            --ramdisk ramdisk.img \
             --base 0x00000000 \
             --pagesize 2048 \
             --kernel_offset 0x8000 \
             --ramdisk_offset 0x01000000 \
             --tags_offset 0x00000100 \
-            --cmdline "console=ttyS0 androidboot.hardware=exynos9611 androidboot.selinux=permissive" \
+            --cmdline "init=/init androidboot.hardware=exynos9611 androidboot.selinux=permissive" \
             -o out/boot.img
 
       # =========================
-      # VERIFY OUTPUT
+      # VERIFY
       # =========================
-      - name: Check boot.img
+      - name: Check output
         run: |
-          ls -lah out
           file out/boot.img
+          ls -lah out
 
       # =========================
-      # UPLOAD RESULT
+      # ARTIFACT
       # =========================
       - name: Upload boot.img
         uses: actions/upload-artifact@v4
         with:
-          name: droidian-boot-m31
+          name: m31-droidian-boot
           path: out/boot.img
